@@ -113,3 +113,48 @@ function createBall(name, color, x) {
     name,
     { diameter: 0.25 },
     scene
+<script>
+let skorAkurasi = 0;
+let skorAksiReaksi = 0;
+let skorMomentum = 0;
+
+function updateScore() {
+  document.getElementById("score").innerHTML =
+    skorAkurasi + skorAksiReaksi + skorMomentum;
+}
+
+// ===== DETEKSI TUMBUKAN =====
+targetBall.physicsImpostor.registerOnPhysicsCollide(
+  cueBall.physicsImpostor, () => {
+
+    // =========================
+    // 1️⃣ AKURASI TUMBUKAN
+    // =========================
+    const arahCue = cueBall.physicsImpostor.getLinearVelocity();
+    const arahTarget = targetBall.position.subtract(cueBall.position);
+    const dot = BABYLON.Vector3.Dot(
+      arahCue.normalize(),
+      arahTarget.normalize()
+    );
+
+    skorAkurasi = Math.max(0, Math.floor(dot * 50));
+
+    // =========================
+    // 2️⃣ AKSI – REAKSI
+    // =========================
+    skorAksiReaksi = 30; // karena impuls otomatis berlawanan arah
+
+    // =========================
+    // 3️⃣ PERUBAHAN MOMENTUM
+    // =========================
+    const m = 1; // massa bola
+    const v1 = cueBall.physicsImpostor.getLinearVelocity().length();
+    const v2 = targetBall.physicsImpostor.getLinearVelocity().length();
+    const deltaP = Math.abs(m * (v2 - v1));
+
+    skorMomentum = Math.min(20, Math.floor(deltaP * 5));
+
+    updateScore();
+  }
+);
+</script>
