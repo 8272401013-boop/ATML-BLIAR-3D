@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Simulasi Biliar Hand Tracking - Hukum Newton III</title>
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<style>
+  body { margin:0; overflow:hidden; }
+  #webcam {
+    position:absolute; top:10px; right:10px;
+    width:180px; border:3px solid #00ff00;
+  }
+</style>
+</head>
+<body>
+
+<video id="webcam" autoplay playsinline></video>
+<canvas id="renderCanvas"></canvas>
+
+<script>
+// ===== BABYLON SCENE =====
+const canvas = document.getElementById("renderCanvas");
+const engine = new BABYLON.Engine(canvas, true);
+
+const createScene = function () {
+  const scene = new BABYLON.Scene(engine);
+  const camera = new BABYLON.ArcRotateCamera("cam",
+      Math.PI/2, Math.PI/3, 10, BABYLON.Vector3.Zero(), scene);
+  camera.attachControl(canvas,true);
+  new BABYLON.HemisphericLight("light", new BABYLON.Vector3(1,1,0), scene);
+
+  const table = BABYLON.MeshBuilder.CreateBox("table",{width:6,depth:3,height:0.2},scene);
+  table.position.y=-0.2;
+
+  cueBall = BABYLON.MeshBuilder.CreateSphere("cue",{diameter:0.3},scene);
+  cueBall.position.z=-1;
+
+  targetBall = BABYLON.MeshBuilder.CreateSphere("target",{diameter:0.3},scene);
+  targetBall.position.z=1;
+
+  return scene;
+};
+
+const scene = createScene();
+engine.runRenderLoop(()=>scene.render());
+
+// ===== WEBCAM AUTO ON =====
+const video = document.getElementById("webcam");
+navigator.mediaDevices.getUserMedia({video:true})
+.then(stream=>video.srcObject=stream);
+
+// ===== HAND TRACKING =====
+let lastZ = 0;
+
+const hands = new Hands({
+  locateFile:file=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
+hands.setOptions({maxNumHands:1, modelComplexity:1});
+hands.onResults(results=>{
+  if(results.multiHandLandmarks.length>0){
+    let z = results.multiHandLandmarks[0][9].z;
+    let speed = lastZ - z;
+    lastZ = z;
+
+    if(speed > 0.01){
+      let force = speed*40;
+      cueBall.position.z += force;
+    }
+  }
+});
+
+const cam = new Camera(video,{
+  onFrame:async()=>{ await hands.send({image:video}); },
+  width:640,height:480
+});
+cam.start();
+</script>
+</body>
+</html>
