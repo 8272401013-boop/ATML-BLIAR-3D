@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Simulasi Hukum Newton III - Biliar 3D</title>
+
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.babylonjs.com/cannon.js"></script>
+
+<style>
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+#renderCanvas {
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+#resetBtn {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 10px 15px;
+  font-size: 16px;
+}
+video {
+  display: none;
+}
+</style>
+</head>
+
+<body>
+<button id="resetBtn">Reset Bola</button>
+<video id="video" autoplay></video>
+<canvas id="renderCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById("renderCanvas");
+const engine = new BABYLON.Engine(canvas, true);
+const scene = new BABYLON.Scene(engine);
+
+scene.enablePhysics(new BABYLON.Vector3(0, -9.8, 0), new BABYLON.CannonJSPlugin());
+
+// Kamera
+const camera = new BABYLON.ArcRotateCamera(
+  "camera",
+  Math.PI / 2,
+  Math.PI / 3,
+  9,
+  BABYLON.Vector3.Zero(),
+  scene
+);
+camera.attachControl(canvas, true);
+
+// Cahaya
+new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0,1,0), scene);
+
+/// ==========================
+/// MEJA BILIAR (HIJAU)
+/// ==========================
+const table = BABYLON.MeshBuilder.CreateBox(
+  "table",
+  { width: 6, depth: 3, height: 0.2 },
+  scene
+);
+table.position.y = -0.1;
+
+const tableMat = new BABYLON.StandardMaterial("tableMat", scene);
+tableMat.diffuseColor = new BABYLON.Color3(0.1, 0.6, 0.3);
+table.material = tableMat;
+table.physicsImpostor = new BABYLON.PhysicsImpostor(
+  table,
+  BABYLON.PhysicsImpostor.BoxImpostor,
+  { mass: 0, restitution: 0.9 },
+  scene
+);
+
+/// ==========================
+/// BINGKAI KAYU
+/// ==========================
+const woodMat = new BABYLON.StandardMaterial("wood", scene);
+woodMat.diffuseColor = new BABYLON.Color3(0.4, 0.2, 0.1);
+
+function makeBorder(x, z, w, d) {
+  const b = BABYLON.MeshBuilder.CreateBox(
+    "border",
+    { width: w, depth: d, height: 0.3 },
+    scene
+  );
+  b.position.set(x, 0, z);
+  b.material = woodMat;
+  b.physicsImpostor = new BABYLON.PhysicsImpostor(
+    b,
+    BABYLON.PhysicsImpostor.BoxImpostor,
+    { mass: 0, restitution: 0.9 },
+    scene
+  );
+}
+
+makeBorder(0, 1.6, 6.3, 0.3);
+makeBorder(0, -1.6, 6.3, 0.3);
+makeBorder(3.15, 0, 0.3, 3.3);
+makeBorder(-3.15, 0, 0.3, 3.3);
+
+/// ==========================
+/// BOLA
+/// ==========================
+function createBall(name, color, x) {
+  const ball = BABYLON.MeshBuilder.CreateSphere(
+    name,
+    { diameter: 0.25 },
+    scene
