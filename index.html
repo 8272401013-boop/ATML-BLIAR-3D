@@ -2,120 +2,206 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<title>Simulasi Hukum Newton III - Biliar 3D</title>
+<title>Simulasi Hukum Newton III – Biliar 3D</title>
+
 <style>
-html,body{width:100%;height:100%;margin:0;overflow:hidden;font-family:Arial}
-#renderCanvas{width:100%;height:100%}
+html,body{
+  width:100%;height:100%;
+  margin:0;overflow:hidden;
+  font-family:Arial, Helvetica, sans-serif;
+}
+#renderCanvas{
+  width:100%;height:100%;
+}
 #panel{
- position:absolute;right:10px;top:10px;width:260px;
- background:#1f2937;color:white;padding:12px;border-radius:10px
+  position:absolute;
+  top:10px;left:10px;
+  z-index:10;
 }
-#panel h3{margin:0 0 6px;color:#facc15}
-.row{font-size:14px;margin:4px 0}
-.total{font-size:20px;color:#22c55e}
-#resetBtn{
- position:absolute;left:10px;top:10px;
- padding:10px 16px;border:none;border-radius:8px;
- background:#2563eb;color:white;cursor:pointer
+button{
+  display:block;
+  margin-bottom:8px;
+  padding:10px 16px;
+  border:none;
+  border-radius:8px;
+  background:#1d4ed8;
+  color:white;
+  font-size:14px;
+  cursor:pointer;
 }
-#hint{
- position:absolute;left:10px;bottom:10px;
- background:#0008;color:white;padding:8px;border-radius:8px
+#info{
+  position:absolute;
+  bottom:10px;left:10px;
+  background:rgba(0,0,0,0.7);
+  color:white;
+  padding:10px;
+  border-radius:8px;
+  font-size:13px;
 }
 video{display:none}
 </style>
 </head>
 
 <body>
-<canvas id="renderCanvas"></canvas>
-
-<button id="resetBtn">Reset Bola</button>
 
 <div id="panel">
-<h3>Sistem Skor</h3>
-<div class="row">Akurasi: <span id="akurasi">0</span></div>
-<div class="row">Aksi–Reaksi: <span id="aksi">0</span></div>
-<div class="row">Momentum: <span id="momentum">0</span></div>
-<div class="row">Eksplorasi: <span id="eksplorasi">0</span></div>
-<div class="total">TOTAL: <span id="total">0</span></div>
+  <button id="btnCamera">Aktifkan Kamera</button>
+  <button id="btnReset">Reset Bola</button>
 </div>
 
-<div id="hint">
-Gerakan tangan di depan kamera<br>
-Kanan = pukul bola • Kiri = arahkan
+<div id="info">
+<b>Petunjuk:</b><br>
+Klik “Aktifkan Kamera” (aturan browser)<br>
+Klik canvas untuk memukul bola<br>
+Reset untuk mengulang eksperimen
 </div>
 
+<canvas id="renderCanvas"></canvas>
 <video id="video" autoplay playsinline></video>
 
 <!-- LIBRARY -->
 <script src="https://cdn.babylonjs.com/babylon.js"></script>
 <script src="https://cdn.babylonjs.com/cannon.js"></script>
 <script src="https://cdn.babylonjs.com/babylon.cannon.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
 <script>
-/* ===== BABYLON SETUP ===== */
-const canvas=document.getElementById("renderCanvas");
-const engine=new BABYLON.Engine(canvas,true);
-const scene=new BABYLON.Scene(engine);
-scene.enablePhysics(new BABYLON.Vector3(0,-9.8,0),new BABYLON.CannonJSPlugin());
+/* ===================================================
+   INISIALISASI ENGINE & SCENE
+=================================================== */
+const canvas = document.getElementById("renderCanvas");
+const engine = new BABYLON.Engine(canvas,true);
+const scene = new BABYLON.Scene(engine);
+scene.clearColor = new BABYLON.Color3(0.08,0.08,0.08);
 
-const camera=new BABYLON.ArcRotateCamera("cam",Math.PI/2,Math.PI/3,10,BABYLON.Vector3.Zero(),scene);
+scene.enablePhysics(
+  new BABYLON.Vector3(0,-9.8,0),
+  new BABYLON.CannonJSPlugin()
+);
+
+/* ===================================================
+   KAMERA & CAHAYA
+=================================================== */
+const camera = new BABYLON.ArcRotateCamera(
+  "camera",
+  Math.PI/2,
+  Math.PI/3,
+  10,
+  new BABYLON.Vector3(0,0,0),
+  scene
+);
 camera.attachControl(canvas,true);
-new BABYLON.HemisphericLight("light",new BABYLON.Vector3(0,1,0),scene);
 
-/* ===== MEJA ===== */
-const table=BABYLON.MeshBuilder.CreateBox("table",{width:6,depth:3,height:0.3},scene);
-table.position.y=-0.15;
-table.material=new BABYLON.StandardMaterial("tm",scene);
-table.material.diffuseColor=new BABYLON.Color3(0.1,0.5,0.1);
-table.physicsImpostor=new BABYLON.PhysicsImpostor(table,BABYLON.PhysicsImpostor.BoxImpostor,{mass:0,restitution:0.9},scene);
+new BABYLON.HemisphericLight(
+  "light",
+  new BABYLON.Vector3(0,1,0),
+  scene
+);
 
-/* ===== BOLA ===== */
-function ball(name,x,z,color){
- const b=BABYLON.MeshBuilder.CreateSphere(name,{diameter:0.25},scene);
- b.position.set(x,0.13,z);
- const m=new BABYLON.StandardMaterial(name+"m",scene);
- m.diffuseColor=color;b.material=m;
- b.physicsImpostor=new BABYLON.PhysicsImpostor(b,BABYLON.PhysicsImpostor.SphereImpostor,{mass:1,restitution:0.95},scene);
- return b;
+/* ===================================================
+   MEJA BILIAR
+=================================================== */
+const table = BABYLON.MeshBuilder.CreateBox("table",{
+  width:7,
+  depth:3.5,
+  height:0.5
+},scene);
+
+table.position.y = -0.25;
+
+const tableMat = new BABYLON.StandardMaterial("tableMat",scene);
+tableMat.diffuseColor = new BABYLON.Color3(0.1,0.6,0.25);
+table.material = tableMat;
+
+table.physicsImpostor = new BABYLON.PhysicsImpostor(
+  table,
+  BABYLON.PhysicsImpostor.BoxImpostor,
+  { mass:0, restitution:0.9 },
+  scene
+);
+
+/* ===================================================
+   FUNGSI BOLA
+=================================================== */
+function createBall(name,x,z,color){
+  const ball = BABYLON.MeshBuilder.CreateSphere(
+    name,{diameter:0.3},scene
+  );
+  ball.position.set(x,0.15,z);
+
+  const mat = new BABYLON.StandardMaterial(name+"Mat",scene);
+  mat.diffuseColor = color;
+  ball.material = mat;
+
+  ball.physicsImpostor = new BABYLON.PhysicsImpostor(
+    ball,
+    BABYLON.PhysicsImpostor.SphereImpostor,
+    { mass:1, restitution:0.95 },
+    scene
+  );
+  return ball;
 }
 
-const cue=ball("cue",0,0,BABYLON.Color3.White());
-const target=ball("target",1.5,0,BABYLON.Color3.Yellow());
+const cueBall = createBall(
+  "cue",-2,0,BABYLON.Color3.White()
+);
+const targetBall = createBall(
+  "target",1.5,0,BABYLON.Color3.Yellow()
+);
 
-const cueStart=cue.position.clone();
-const targetStart=target.position.clone();
+const cueStart = cueBall.position.clone();
+const targetStart = targetBall.position.clone();
 
-/* ===== SKOR ===== */
-let akurasi=0,aksi=0,momentum=0,eksplorasi=0;
-let angle=0,power=6;
-
-/* ===== RESET ===== */
-resetBtn.onclick=()=>{
- cue.physicsImpostor.setLinearVelocity(BABYLON.Vector3.Zero());
- target.physicsImpostor.setLinearVelocity(BABYLON.Vector3.Zero());
- cue.position.copyFrom(cueStart);
- target.position.copyFrom(targetStart);
- akurasi=aksi=momentum=eksplorasi=0;
+/* ===================================================
+   RESET BOLA
+=================================================== */
+btnReset.onclick = () => {
+  cueBall.physicsImpostor.setLinearVelocity(
+    BABYLON.Vector3.Zero()
+  );
+  targetBall.physicsImpostor.setLinearVelocity(
+    BABYLON.Vector3.Zero()
+  );
+  cueBall.position.copyFrom(cueStart);
+  targetBall.position.copyFrom(targetStart);
 };
 
-/* ===== HAND TRACKING ===== */
-const video=document.getElementById("video");
-navigator.mediaDevices.getUserMedia({video:true}).then(s=>video.srcObject=s);
-
-const hands=new Hands({
- locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+/* ===================================================
+   AKSI–REAKSI (HUKUM NEWTON III)
+=================================================== */
+canvas.addEventListener("pointerdown",()=>{
+  const force = new BABYLON.Vector3(3,0,0);
+  cueBall.physicsImpostor.applyImpulse(
+    force,
+    cueBall.getAbsolutePosition()
+  );
 });
 
-hands.setOptions({
- maxNumHands:2,
- modelComplexity:1,
- minDetectionConfidence:0.7,
- minTrackingConfidence:0.7
+/* ===================================================
+   AKTIVASI KAMERA LAPTOP
+=================================================== */
+btnCamera.onclick = async () => {
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:true
+    });
+    document.getElementById("video").srcObject = stream;
+    alert("Kamera laptop aktif ✔");
+  }catch(e){
+    alert("Kamera tidak dapat diakses");
+  }
+};
+
+/* ===================================================
+   RENDER LOOP
+=================================================== */
+engine.runRenderLoop(()=>{
+  scene.render();
 });
 
-hands.onResults(res=>{
- if(!res.multiHandLandmarks)return;
- res.mult
+window.addEventListener("resize",()=>{
+  engine.resize();
+});
+</script>
+
+</body>
+</html>
