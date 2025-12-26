@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Simulasi Hukum Newton III – Biliar 3D Interaktif</title>
+
+<!-- Babylon.js -->
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.babylonjs.com/cannon.js"></script>
+
+<!-- MediaPipe Hands -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden}
+#renderCanvas{width:100%;height:100%}
+#panel{
+  position:absolute;top:10px;left:10px;z-index:10
+}
+#panel button{
+  padding:10px;margin-bottom:6px;
+  border:none;border-radius:8px;
+  background:#1d4ed8;color:white;font-size:14px
+}
+#scoreBox{
+  position:absolute;top:10px;right:10px;
+  background:rgba(0,0,0,.75);
+  color:white;padding:12px;border-radius:8px;
+  font-size:14px
+}
+video{display:none}
+</style>
+</head>
+
+<body>
+
+<div id="panel">
+  <button id="resetBtn">Reset Bola</button>
+</div>
+
+<div id="scoreBox">
+  Akurasi Tumbukan: <span id="akurasi">0</span><br>
+  Aksi–Reaksi: <span id="aksi">0</span><br>
+  Momentum: <span id="momentum">0</span><br>
+  <hr>
+  <b>Total Skor: <span id="total">0</span></b>
+</div>
+
+<video id="video" autoplay playsinline></video>
+<canvas id="renderCanvas"></canvas>
+
+<script>
+// ==================================================
+// INISIALISASI SCENE
+// ==================================================
+const canvas = document.getElementById("renderCanvas");
+const engine = new BABYLON.Engine(canvas,true);
+const scene = new BABYLON.Scene(engine);
+
+scene.enablePhysics(
+  new BABYLON.Vector3(0,-9.8,0),
+  new BABYLON.CannonJSPlugin()
+);
+
+// Kamera
+const camera = new BABYLON.ArcRotateCamera(
+  "cam",Math.PI/2,Math.PI/3,9,
+  BABYLON.Vector3.Zero(),scene
+);
+camera.attachControl(canvas,true);
+
+// Cahaya
+new BABYLON.HemisphericLight(
+  "light",new BABYLON.Vector3(0,1,0),scene
+);
+
+// ==================================================
+// MEJA BILIAR
+// ==================================================
+const table = BABYLON.MeshBuilder.CreateBox(
+  "table",{width:6,depth:3,height:0.2},scene
+);
+table.position.y = -0.1;
+
+const tableMat = new BABYLON.StandardMaterial("tm",scene);
+tableMat.diffuseColor = new BABYLON.Color3(0.1,0.6,0.3);
+table.material = tableMat;
+
+table.physicsImpostor = new BABYLON.PhysicsImpostor(
+  table,BABYLON.PhysicsImpostor.BoxImpostor,
+  {mass:0,restitution:0.9},scene
+);
+
+// ==================================================
+// BOLA
+// ==================================================
+function makeBall(name,color,x){
+  const b = BABYLON.MeshBuilder.CreateSphere(
+    name,{diameter:0.25},scene
+  );
+  b.position.set(x,0.15,0);
+
+  const m = new BABYLON.StandardMaterial(name+"m",scene);
+  m.diffuseColor = color;
+  b.material = m;
+
+  b.physicsImpostor = new BABYLON.PhysicsImpostor(
+    b,BABYLON.PhysicsImpostor.SphereImpostor,
+    {mass:1,restitution:0.9},scene
+  );
+  return b;
+}
+
+const cueBall = makeBall("cue",BABYLON.Color3.White(),-1);
+const targetBall = makeBall(
+  "target",new BABYLON.Color3(1,0.7,0),1
+);
+
+// ==================================================
+// SKOR
+// ==================================================
+let skorAkurasi=0, skorAksi=0, skorMomentum=0;
+
+function updateScore(){
+  document.getElementById("akurasi").textContent = skorAkurasi;
+  document.getElementById("aksi").textContent = skorAksi;
+  document.getElementById("momentum").textContent = skorMomentum;
+  document.getElementById("total").textContent =
+    skorAkurasi + skorAksi + skorMomentum;
+}
+
+targetBall.physicsImpostor.registerOnPhysicsCollide(
+  cueBall.physicsImpostor,()=>{
+
+    // Akurasi tumbukan
+    const vCue = cueBall.physicsImpostor.getLinearVelocity();
+    const arah = targetBall.position.subtract(cueBall.position);
+    const dot = BABYLON.Vector3.Dot(
+      vCue.normalize(), arah.normalize()
+    );
+    skorAkurasi = Math.max(0,Math.floor(dot*50));
+
+    // Aksi–reaksi
+    skorAksi = 30;
+
+    // Momentum
+    const m = 1;
+    const v1 = vCue.length();
+    const v2 = targetBall.physicsImpostor
+                 .getLinearVelocity().length();
+    skorMomentum = Math.min(
+      20,Math.floor(Math.abs(m*(v2-v1))*5)
+    );
+
+    updateScore();
+  }
+);
+
+// ==================================================
+// RESET
+// ==================================================
+resetBtn.onclick = ()=>{
+  cueBall.position.set(-1,0.15,0);
+  targetBall.position.set(1,0.15,0);
+  cueBall.physicsImpostor.setLinearVelocity(
+    BABYLON.Vector3.Zero()
+  );
+  targetBall.physicsImpostor.setLinearVelocity(
+    BABYLON.Vector3.Zero()
+  );
+  skorAkurasi=skorAksi=skorMomentum=0;
+  updateScore();
+};
+
+// ==================================================
+// HAND TRACKING (DUA TELUNJUK)
+// ==================================================
+const video = document.getElementById("video");
+
+navigator.mediaDevices.getUserMedia({video:true})
+.then(stream=>video.srcObject=stream);
+
+const hands = new Hands({
+  locateFile: f =>
+  `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+});
+hands.setOptions({
+  maxNumHands:2,
+  minDetectionConfidence:0.7,
+  minTrackingConfidence:0.7
+});
+
+hands.onResults(results=>{
+  if(!results.multiHandLandmarks) return;
+
+  results.multiHandLandmarks.forEach((landmarks,i)=>{
+    const tip = landmarks[8];
+    const x = tip.x - 0.5;
+    const y = 0.5 - tip.y;
+
+    // Telunjuk kanan → pukul bola
+    if(i===0){
+      const force = new BABYLON.Vector3(
+        x*6,0,y*6
+      );
+      cueBall.physicsImpostor.applyImpulse(
+        force, cueBall.getAbsolutePosition()
+      );
+    }
+
+    // Telunjuk kiri → putar meja
+    if(i===1){
+      table.rotation.y = x * Math.PI;
+    }
+  });
+});
+
+const cam = new Camera(video,{
+  onFrame: async()=>{
+    await hands.send({image:video});
+  },
+  width:640,height:480
+});
+cam.start();
+
+// ==================================================
+engine.runRenderLoop(()=>scene.render());
+window.addEventListener("resize",()=>engine.resize());
+</script>
+
+</body>
+</html>
