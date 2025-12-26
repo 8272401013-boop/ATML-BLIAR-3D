@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simulasi Biliar 3D Interaktif</title>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/cannon.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <style>
+        body { margin:0; overflow:hidden; }
+        #scoreDisplay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 24px;
+            color: white;
+            background: rgba(0,0,0,0.5);
+            padding: 8px 12px;
+            border-radius: 8px;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+<div id="scoreDisplay">Skor: 0</div>
+<canvas id="renderCanvas" touch-action="none"></canvas>
+
+<script>
+    // ===== 1. Inisialisasi Scene =====
+    const canvas = document.getElementById("renderCanvas");
+    const engine = new BABYLON.Engine(canvas, true);
+    const scene = new BABYLON.Scene(engine);
+    scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), new BABYLON.CannonJSPlugin());
+
+    // ===== 2. Kamera & Cahaya =====
+    const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI/2, Math.PI/3, 5, BABYLON.Vector3.Zero(), scene);
+    camera.attachControl(canvas, true);
+    const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0,1,0), scene);
+
+    // ===== 3. Meja Biliar Hijau =====
+    const meja = BABYLON.MeshBuilder.CreateBox("meja", {width: 2, height: 0.1, depth: 1});
+    meja.position.y = -0.05;
+    meja.material = new BABYLON.StandardMaterial("mejaMat", scene);
+    meja.material.diffuseColor = new BABYLON.Color3(0, 0.6, 0);
+    meja.physicsImpostor = new BABYLON.PhysicsImpostor(meja, BABYLON.PhysicsImpostor.BoxImpostor, {mass:0, restitution:0.9}, scene);
+
+    // ===== 4. Bola Cue =====
+    const bolaCue = BABYLON.MeshBuilder.CreateSphere("cue", {diameter:0.1});
+    bolaCue.position = new BABYLON.Vector3(-0.8, 0.05, 0);
+    bolaCue.material = new BABYLON.StandardMaterial("cueMat", scene);
+    bolaCue.material.diffuseColor = new BABYLON.Color3(1,1,1);
+    bolaCue.physicsImpostor = new BABYLON.PhysicsImpostor(bolaCue, BABYLON.PhysicsImpostor.SphereImpostor, {mass:1, restitution:0.9}, scene);
+
+    // ===== 5. Tumpukan Bola Target =====
+    let bolaTargets = [];
+    for(let i=0;i<3;i++){
+        let bola = BABYLON.MeshBuilder.CreateSphere("target"+i, {diameter:0.1});
+        bola.position = new BABYLON.Vector3(0.5 + i*0.15, 0.05, 0); // posisi sejajar
+        bola.physicsImpostor = new BABYLON.PhysicsImpostor(bola, BABYLON.PhysicsImpostor.SphereImpostor, {mass:1, restitution:0.9}, scene);
+        bola.material = new BABYLON.StandardMaterial("targetMat"+i, scene);
+        bola.material.diffuseColor = new BABYLON.Color3(1,0,0); // merah
+        bolaTargets.push(bola);
+    }
+
+    // ===== 6. Sistem Skor =====
+    let skor = 0;
+    const scoreDisplay = document.getElementById("scoreDisplay");
+
+    function updateScore() {
+        bolaTargets.forEach(bola => {
+            const jarak = bolaCue.position.subtract(bola.position).length();
+            if(jarak < 0.15){
+                skor += 10;
+                scoreDisplay.innerText = "Skor: " + skor;
+                bola.material.diffuseColor = new BABYLON.Color3(0,1,0); // hijau sementara
+                setTimeout(() => { bola.material.diffuseColor = new BABYLON.Color3(1,0,0); }, 300);
+                bola.position.x = Math.random() * 1.4 - 0.7;
+                bola.position.z = Math.random() * 0.8 - 0.4;
+            }
+        });
+    }
+
+    // ===== 7. Panah Aksi-Reaksi =====
+    function buatPanah(from, to){
+        const arrow = BABYLON.MeshBuilder.CreateLines("arrow", {points:[from,to]}, scene);
+        arrow.color = BABYLON.Color3.Yellow();
+        setTimeout(()=>{arrow.dispose();}, 200); // hilang setelah 0.2 detik
+    }
+
+    // ===== 8. Kamera Laptop & Deteksi Kedua Telunjuk =====
+    async function initCameraAndHands() {
+        const stream = await navigator.mediaDevices.getUserMedia({video:true});
+        const video = document.createElement("video");
+        video.srcObject = stream;
+        video.play();
+
+        const model = await handPoseDetection.createDetector(handPoseDetection.SupportedModels.MediaPipeHands, {runtime:"tfjs"});
+
+        scene.onBeforeRenderObservable.add(async () => {
+            const hands = await model.estimateHands(video, {flipHorizontal: true});
+            if(hands.length >= 1){
+                const rightIndex = hands[0].keypoints[8]; // telunjuk kanan
+                const leftIndex = hands[0].keypoints[12]; // telunjuk kiri
+                const forceX = (rightIndex.x - leftIndex.x) * 0.01;
+                const forceZ = (rightIndex.y - leftIndex.y) * 0.01;
+                bolaCue.physicsImpostor.applyImpulse(new BABYLON.Vector3(forceX,0,forceZ), bolaCue.getAbsolutePosition());
+                // Panah aksi–reaksi
+                buatPanah(bolaCue.position, bolaCue.position.add(new BABYLON.Vector3(forceX,0,forceZ)));
+            }
+        });
+    }
+    initCameraAndHands();
+
+    // ===== 9. Render Loop =====
+    engine.runRenderLoop(() => {
+        updateScore();
+        scene.render();
+    });
+
+    window.addEventListener("resize", () => { engine.resize(); });
+</script>
+</body>
+</html>
